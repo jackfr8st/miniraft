@@ -95,3 +95,31 @@ func (n *Node) startElection() {
 func( n *Node) Run() {
 	go n.electionTimerLoop()
 }
+
+func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	n.Lock()
+	defer n.Unlock()
+
+	//candidate is behind, reject
+	if args.Term < n.currentTerm {
+		reply.Term = n.currentTerm
+		reply.VoteGiven = false
+		return
+	}
+
+	if args.Term > n.currentTerm {
+		n.currentTerm = args.Term
+		n.state = Follower
+		n.votedFor = ""
+	}
+
+	if n.votedFor == "" || n.votedFor == args.CandidateID {
+		n.votedFor = args.CandidateID
+		n.resetElectionTimer()
+		reply.VoteGiven = true
+	}else {
+		reply.VoteGiven = false
+	}
+	reply.Term = n.currentTerm
+
+}
