@@ -86,10 +86,51 @@ func (n *Node) startElection() {
 	n.state = Candidate
 	n.currentTerm++
 	term := n.currentTerm
+	n.votedFor = n.id
 	n.resetElectionTimer()
+	log.Printf("[%s] starting election for term %d", n.id, term)
 	n.Unlock()
 
-	log.Printf("Node %s starting election for term %d", n.id, term)
+	votes := 1
+	var voteMu sync.Mutex
+	var wg sync.WaitGroup
+
+	for peerID, addr := range n.peers{
+		wg.Add(1)
+
+		go func(peerID, addr string){
+			defer wg.Done()
+
+			args  := &RequestVoteArgs{Term: term, CandidateID: n.id}
+			var reply RequestVoteReply
+			if err := callRPC(addr, "RaftRPC.RequestVote", args, &reply); err != nil{
+				return
+			}
+
+			voteMu.Lock()
+			defer voteMu.Unlock()
+			if reply.VoteGiven {
+				votes ++
+			} else if reply.Term > term {
+				n.Lock()
+				if reply.Term > n.currentTerm {
+					n.currentTerm = reply.Term
+					n.state = Follower
+					n.votedFor = ""
+				}
+				n.Unlock()
+			}
+		}(peerID, addr)
+	}
+
+	wg.Wait()
+	majority := len(n.peers)/2 + 1
+	n.Lock()
+	defer n.Unlock()
+	if n.state == Candidate && n.currentTerm == term && votes >= majority{
+		n.state = Leader
+		log.Printf("[%s] won election for term %d with %d votes", n.id, term, votes)
+	}
 }
 
 func( n *Node) Run() {

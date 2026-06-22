@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"time"
 )
 
 type RaftRPC struct {
@@ -37,4 +38,15 @@ func (n *Node) Serve(addr string) error {
 		}
 	}()
 	return nil
+}
+
+func callRPC(addr, method string, args, reply interface{}) error {
+	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	client := rpc.NewClient(conn)
+	defer client.Close()
+	return client.Call(method, args, reply)
 }
