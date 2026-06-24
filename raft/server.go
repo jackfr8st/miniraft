@@ -16,6 +16,11 @@ func (r *RaftRPC) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) er
 	return nil
 }	
 
+func (r *RaftRPC) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) error {
+	r.node.HandleAppendEntries(args, reply)
+	return nil
+}
+
 func (n *Node) Serve(addr string) error {
 	server := rpc.NewServer()
 	if err := server.RegisterName("RaftRPC", &RaftRPC{node: n}); err != nil {

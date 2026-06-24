@@ -1,10 +1,10 @@
 package raft
 
 import (
-	"sync"
-	"math/rand"
-	"time"
 	"log"
+	"math/rand"
+	"sync"
+	"time"
 )
 
 type State int
@@ -105,6 +105,7 @@ func (n *Node) startElection() {
 			var reply RequestVoteReply
 			if err := callRPC(addr, "RaftRPC.RequestVote", args, &reply); err != nil{
 				return
+				// log.Printf("[%s] failed to request vote from %s: %v", n.id, peerID, err)
 			}
 
 			voteMu.Lock()
@@ -136,6 +137,7 @@ func (n *Node) startElection() {
 
 func( n *Node) Run() {
 	go n.electionTimerLoop()
+	go n.statusLoop()
 }
 
 func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -210,11 +212,26 @@ func (n *Node) heartbeatLoop(term int){
 					go func(addr string){
 						args := &AppendEntriesArgs{Term: term, LeaderID: n.id}
 						var reply AppendEntriesReply
-						callRPC(addr, "RaftRPC.AppendEntries", args, &reply)
+						if err := callRPC(addr, "RaftRPC.AppendEntries", args, &reply); err != nil {
+							log.Printf("[%s] failed to send heartbeat to %s: %v", n.id, addr, err)
+						}
 					}(addr)
 				}
 		}
 	}
 }
 		
-		
+func (n *Node) statusLoop() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-n.stopCh:
+			return
+		case <-ticker.C:
+			n.Lock()
+			log.Printf("[%s] STATUS state=%s term=%d", n.id, n.state, n.currentTerm)
+			n.Unlock()
+		}
+	}
+}

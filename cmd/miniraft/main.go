@@ -1,47 +1,49 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"miniraft/raft"
-	"time"
+	"strings"
 )
 
 func main() {
 
-	peersFor := func(self string) map[string]string {
-		all := map[string]string{
-			"node1": "127.0.0.1:9001",
-			"node2": "127.0.0.1:9002",
-			"node3": "127.0.0.1:9003",
-		}
-		peers := map[string]string{}
-		for id, addr := range all {
-			if id != self {
-				peers[id] = addr
-			}
-		}
-	return peers
+	id:= flag.String("id","","this node's id, e.g. node1")
+	addr := flag.String("addr","","this node's listening address, e.g. 128.0.0.1:9001")
+	peersFlag := flag.String("peers","","")
+	flag.Parse()
+
+	if *id == "" || *addr == "" {
+		log.Fatal("must specify -id and -addr")
 	}
 
-	n1 := raft.NewNode("node1", peersFor("node1"))
-	n2 := raft.NewNode("node2", peersFor("node2"))
-	n3 := raft.NewNode("node3", peersFor("node3"))
+	peers := parsePeers(*peersFlag)
 
-	if err := n1.Serve(":9001"); err != nil {
+	n := raft.NewNode(*id, peers)
+	if err := n.Serve(*addr); err != nil {
 		log.Fatal( err)
 	}
-	if err := n2.Serve(":9002"); err != nil {
-		log.Fatal(err)
+	
+	n.Run()
+
+	select {} //blocked forever, since the node should continue to run till the process is killed
+
+}
+
+
+func parsePeers(s string) map[string]string {
+	peers := map[string]string{}
+	if s == ""{
+		return peers
 	}
-	if err := n3.Serve(":9003"); err != nil {
-		log.Fatal(err)
+
+	for _, pair := range strings.Split(s, ",") {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2{
+			log.Fatalf("invalid peer format: %s", pair)
+		}
+		peers[parts[0]] = parts[1]
 	}
-
-	n1.Run()
-	n2.Run()
-	n3.Run()
-
-	time.Sleep(3*time.Second)
-
-
+	return peers
 }
