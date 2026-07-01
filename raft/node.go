@@ -40,6 +40,9 @@ type Node struct {
 	electionResetAt time.Time // last time the election timer was reset
 	electionTimeout time.Duration // election timeout duration
 	stopCh chan struct{} // channel to signal stopping the node
+	log []LogEntry // log entries
+	commitIndex int // hightest idx that is committed  
+	lastApplied int // highest idx that this node has applied to its state
 }
 
 // a new Raft node with the given ID and peers
@@ -135,10 +138,7 @@ func (n *Node) startElection() {
 	}
 }
 
-func( n *Node) Run() {
-	go n.electionTimerLoop()
-	go n.statusLoop()
-}
+
 
 func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	n.Lock()
@@ -168,7 +168,6 @@ func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
 
 }
 
-
 func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	n.Lock()
 	defer n.Unlock()
@@ -180,6 +179,7 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 		return
 	}
 
+
 	if args.Term > n.currentTerm || n.state == Candidate{
 		n.currentTerm = args.Term
 		n.state = Follower
@@ -188,6 +188,24 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 
 	n.state = Follower
 	n.resetElectionTimer()
+
+	//consistency check on followers
+	if args.PrevLogIndex > 0 {
+		if args.PrevLogIndex > len(n.log) {
+			// we dont have an entry => cant verify => reject
+			reply.Term = n.currentTerm
+			reply.Success = false
+			return
+		}
+
+		if n.log[args.PrevLogIndex-1].Term != args.PrevLogTerm {
+			//have entry but different term => histories diverged => reject
+			reply.Term = n.currentTerm
+			reply.Success = false
+			return
+		}
+	}
+
 	reply.Term = n.currentTerm
 	reply.Success = true
 }
@@ -219,6 +237,11 @@ func (n *Node) heartbeatLoop(term int){
 				}
 		}
 	}
+}
+
+func( n *Node) Run() {
+	go n.electionTimerLoop()
+	go n.statusLoop()
 }
 		
 func (n *Node) statusLoop() {
