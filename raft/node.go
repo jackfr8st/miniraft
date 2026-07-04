@@ -43,6 +43,9 @@ type Node struct {
 	log []LogEntry // log entries
 	commitIndex int // hightest idx that is committed  
 	lastApplied int // highest idx that this node has applied to its state
+	store map[string]string // key-value store from applying committed log entries
+	nextIndex map[string]int // what to send next (leader only, per peer)
+	matchIndex map[string]int // confirmed replicated upto (leader only, per peer)
 }
 
 // a new Raft node with the given ID and peers
@@ -52,6 +55,7 @@ func NewNode(id string, peers map[string]string) *Node {
 		peers : peers,
 		state : Follower,
 		stopCh : make(chan struct{}),
+		store : make(map[string]string),
 	}
 	n.resetElectionTimer()
 	return n
@@ -134,10 +138,17 @@ func (n *Node) startElection() {
 	if n.state == Candidate && n.currentTerm == term && votes >= majority{
 		n.state = Leader
 		log.Printf("[%s] won election for term %d with %d votes", n.id, term, votes)
+
+		n.nextIndex = make(map[string]int)
+		n.matchIndex = make(map[string]int)
+		for peerID := range n.peers {
+			n.nextIndex[peerID] = len(n.log) + 1
+			n.matchIndex[peerID] = 0
+		}
+
 		go n.heartbeatLoop(term)
 	}
 }
-
 
 
 func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -179,7 +190,6 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 		return
 	}
 
-
 	if args.Term > n.currentTerm || n.state == Candidate{
 		n.currentTerm = args.Term
 		n.state = Follower
@@ -204,6 +214,33 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 			reply.Success = false
 			return
 		}
+	}
+
+	for i, entry := range args.Entries {
+		idx := args.PrevLogIndex + i + 1
+		if idx <= len(n.log){
+			//our entry different from leader's => unreliable history => cut it & accept leader's entries
+			if n.log[idx-1].Term != entry.Term {
+				n.log = n.log[:idx-1] 
+				n.log = append(n.log, args.Entries[i:]...)
+				break
+			}
+			// same term
+			continue
+		}
+		//append rest of leader's entries to our log
+		n.log = append(n.log,args.Entries[i:]...)
+		break
+	}
+
+	//update commit index & apply committed entries
+	if args.LeaderCommit > n.commitIndex {
+		if args.LeaderCommit < len(n.log) {
+			n.commitIndex = args.LeaderCommit
+		}else{
+			n.commitIndex = len(n.log)
+		}
+		n.applyCommittedLocked()
 	}
 
 	reply.Term = n.currentTerm
@@ -244,6 +281,10 @@ func( n *Node) Run() {
 	go n.statusLoop()
 }
 		
+
+/// HELPERS
+
+// logs the node's state and term for debugging
 func (n *Node) statusLoop() {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -255,6 +296,22 @@ func (n *Node) statusLoop() {
 			n.Lock()
 			log.Printf("[%s] STATUS state=%s term=%d", n.id, n.state, n.currentTerm)
 			n.Unlock()
+		}
+	}
+}
+
+// applies committed log entries to the node's state machine
+func (n *Node) applyCommittedLocked(){
+	for n.lastApplied < n.commitIndex {
+		n.lastApplied++
+		entry := n.log[n.lastApplied-1]
+
+		switch entry.Command.Op{
+			case OpPut:
+				n.store[entry.Command.Key] = entry.Command.Value
+			
+			case OpDelete:
+				delete(n.store, entry.Command.Key)
 		}
 	}
 }
