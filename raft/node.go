@@ -51,14 +51,25 @@ type Node struct {
 }
 
 // a new Raft node with the given ID and peers
-func NewNode(id string, peers map[string]string) *Node {
+func NewNode(id string, peers map[string]string, statePath string) *Node {
 	n := &Node{
 		id : id,
 		peers : peers,
 		state : Follower,
 		stopCh : make(chan struct{}),
 		store : make(map[string]string),
+		statePath: statePath,
 	}
+
+	if loaded, found, err := loadState(statePath); err != nil{
+		log.Printf("[%s] failed to load persisted state: %v (starting fresh)", id, err)
+	} else if found {
+		n.currentTerm = loaded.CurrentTerm
+		n.votedFor = loaded.VotedFor
+		n.log = loaded.Log
+		log.Printf("[%s] restored persisted state: term=%d votedFor=%q logLen=%d", id, n.currentTerm, n.votedFor, len(n.log))
+	}
+
 	n.resetElectionTimer()
 	return n
 }
@@ -98,6 +109,9 @@ func (n *Node) startElection() {
 	n.votedFor = n.id
 	n.resetElectionTimer()
 	log.Printf("[%s] starting election for term %d", n.id, term)
+	if err := n.saveStateLocked(); err != nil {
+		log.Printf("[%s] ffailed to save state: %v", n.id, err)
+	}
 	n.Unlock()
 
 	votes := 1
@@ -180,6 +194,9 @@ func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
 		reply.VoteGiven = false
 	}
 	reply.Term = n.currentTerm
+	if err := n.saveStateLocked(); err != nil {
+		log.Printf("[%s] ffailed to save state: %v", n.id, err)
+	}
 
 }
 
@@ -251,6 +268,9 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 
 	reply.Term = n.currentTerm
 	reply.Success = true
+	if err := n.saveStateLocked(); err != nil {
+		log.Printf("[%s] ffailed to save state: %v", n.id, err)
+	}
 }
 
 func (n *Node) heartbeatLoop(term int){

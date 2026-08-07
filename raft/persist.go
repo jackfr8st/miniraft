@@ -44,6 +44,9 @@ func (n *Node) saveStateLocked() error {
 		return err
 	}
 
+	if err := os.Remove(n.statePath); err != nil && !os.IsNotExist(err){
+		return err
+	}
 	return os.Rename(tmpPath, n.statePath) //either old file or fully-written new file will be present, never a half-written file
 }
 
