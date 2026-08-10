@@ -46,7 +46,7 @@ func (n *Node) Serve(addr string) error {
 }
 
 func callRPC(addr, method string, args, reply interface{}) error {
-	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
 	if err != nil {
 		return err
 	}
