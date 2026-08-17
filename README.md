@@ -89,6 +89,9 @@ cmd/
   client/       CLI client for put/get against the cluster
   debug/        CLI tool for querying DebugState
   chaos/        Automated chaos-testing harness
+chaos_test.ps1  Original PowerShell chaos-test driver, superseded by
+                cmd/chaos — kept as part of the debugging record (see
+                DESIGN_LOG.md, Step 21)
 ```
 
 ## Design decisions and trade-offs
