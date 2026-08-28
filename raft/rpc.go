@@ -10,3 +10,12 @@ type RequestVoteReply struct {
 	VoteGiven bool
 }
 
+type AppendEntriesArgs struct {
+	Term int 
+	LeaderID string
+}
+
+type AppendEntriesReply struct {
+	Term int
+	Success bool
+}

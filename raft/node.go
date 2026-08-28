@@ -130,6 +130,7 @@ func (n *Node) startElection() {
 	if n.state == Candidate && n.currentTerm == term && votes >= majority{
 		n.state = Leader
 		log.Printf("[%s] won election for term %d with %d votes", n.id, term, votes)
+		go n.heartbeatLoop(term)
 	}
 }
 
@@ -164,3 +165,56 @@ func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
 	reply.Term = n.currentTerm
 
 }
+
+
+func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	n.Lock()
+	defer n.Unlock()
+
+	//leader is behind, reject
+	if args.Term < n.currentTerm {
+		reply.Term = n.currentTerm
+		reply.Success = false
+		return
+	}
+
+	if args.Term > n.currentTerm || n.state == Candidate{
+		n.currentTerm = args.Term
+		n.state = Follower
+		n.votedFor = ""
+	}
+
+	n.state = Follower
+	n.resetElectionTimer()
+	reply.Term = n.currentTerm
+	reply.Success = true
+}
+
+func (n *Node) heartbeatLoop(term int){
+	ticker := time.NewTicker(50*time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+			case <-n.stopCh:
+				return
+			case <-ticker.C:
+				n.Lock()
+				stillLeader := n.state == Leader && n.currentTerm == term
+				n.Unlock()
+
+				if !stillLeader {
+					return 
+				}
+				for _, addr := range n.peers {
+					go func(addr string){
+						args := &AppendEntriesArgs{Term: term, LeaderID: n.id}
+						var reply AppendEntriesReply
+						callRPC(addr, "RaftRPC.AppendEntries", args, &reply)
+					}(addr)
+				}
+		}
+	}
+}
+		
+		
