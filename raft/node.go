@@ -263,15 +263,90 @@ func (n *Node) heartbeatLoop(term int){
 				if !stillLeader {
 					return 
 				}
-				for _, addr := range n.peers {
-					go func(addr string){
-						args := &AppendEntriesArgs{Term: term, LeaderID: n.id}
-						var reply AppendEntriesReply
-						if err := callRPC(addr, "RaftRPC.AppendEntries", args, &reply); err != nil {
-							log.Printf("[%s] failed to send heartbeat to %s: %v", n.id, addr, err)
-						}
-					}(addr)
+				
+				for peerID, addr := range n.peers {
+					go n.replicateToPeer(term, peerID, addr)
 				}
+		}
+	}
+}
+
+// sends peers whatever entries they are missing, or just a heartbeat if they are up to date
+func (n *Node) replicateToPeer(term int, peerID, addr string) {
+	n.Lock()
+	if n.state != Leader || n.currentTerm != term {
+		n.Unlock()
+		return //step down / term changed
+	}
+
+	nextIdx := n.nextIndex[peerID]
+	prevLogIndex := nextIdx - 1
+	prevLogTerm := 0
+	if prevLogIndex > 0 {
+		prevLogTerm = n.log[prevLogIndex-1].Term
+	}
+
+	var entries []LogEntry
+	if nextIdx <= len(n.log) {
+		entries = append(entries, n.log[nextIdx-1:]...)
+	}
+	args := &AppendEntriesArgs{
+		Term:         term,
+		LeaderID:     n.id,
+		PrevLogIndex: prevLogIndex,
+		PrevLogTerm:  prevLogTerm,
+		Entries:      entries,
+		LeaderCommit: n.commitIndex,
+	}
+	n.Unlock()
+
+	var reply AppendEntriesReply
+	if err := callRPC(addr, "RaftRPC.AppendEntries", args, &reply); err != nil {
+		log.Printf("[%s] failed to send heartbeat to %s: %v", n.id, peerID, err)
+		return
+	}
+
+	n.Lock()
+	defer n.Unlock()
+	if reply.Term > n.currentTerm {
+		n.currentTerm = reply.Term
+		n.state = Follower
+		n.votedFor = ""
+		return
+	}
+
+	if n.state != Leader || n.currentTerm != term {
+		return //steped down while this RPC was in flight
+	}
+
+	if reply.Success {
+		n.matchIndex[peerID] = prevLogIndex + len(entries)
+		n.nextIndex[peerID] = n.matchIndex[peerID] + 1
+		n.advCommitIdxLocked()
+	} else if n.nextIndex[peerID] > 1 {
+		n.nextIndex[peerID]--
+	}
+}
+
+//checks if any new log entries have now been replicated to a majority of nodes and can be committed (called only by leader)
+func (n *Node) advCommitIdxLocked() {
+	for idx := len(n.log); idx > n.commitIndex; idx-- {
+
+		//only commit entries from our own term => skip anything older
+		if n.log[idx-1].Term != n.currentTerm {
+			continue
+		}
+
+		replicas := 1 //leader has its own entry
+		for _, matched := range n.matchIndex{
+			if matched >= idx{
+				replicas++
+			}
+		}
+		if replicas >= len(n.peers)/2 + 1 {
+			n.commitIndex = idx
+			n.applyCommittedLocked()
+			return // highest qualifying idx
 		}
 	}
 }
