@@ -47,6 +47,7 @@ type Node struct {
 	nextIndex map[string]int // what to send next (leader only, per peer)
 	matchIndex map[string]int // confirmed replicated upto (leader only, per peer)
 	whoLeader string // last leader we saw an AppendEntries from 
+	statePath string // path to persist state (if empty, no persistence)
 }
 
 // a new Raft node with the given ID and peers
