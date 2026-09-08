@@ -130,7 +130,6 @@ func (n *Node) startElection() {
 				n.Unlock()
 			}
 		}(peerID, addr)
-		n.whoLeader = n.id
 	}
 
 	wg.Wait()
@@ -140,6 +139,8 @@ func (n *Node) startElection() {
 	if n.state == Candidate && n.currentTerm == term && votes >= majority{
 		n.state = Leader
 		log.Printf("[%s] won election for term %d with %d votes", n.id, term, votes)
+
+		n.whoLeader = n.id
 
 		n.nextIndex = make(map[string]int)
 		n.matchIndex = make(map[string]int)
