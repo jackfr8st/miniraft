@@ -55,3 +55,12 @@ func callRPC(addr, method string, args, reply interface{}) error {
 	defer client.Close()
 	return client.Call(method, args, reply)
 }
+
+
+func (r *RaftRPC) ClientPut(args *ClientPutArgs, reply *ClientPutReply) error {
+	return r.node.HandleClientPut(args, reply)
+}
+
+func (r *RaftRPC) ClientGet(args *ClientGetArgs, reply *ClientGetReply) error {
+	return r.node.HandleClientGet(args, reply)
+}

@@ -46,6 +46,7 @@ type Node struct {
 	store map[string]string // key-value store from applying committed log entries
 	nextIndex map[string]int // what to send next (leader only, per peer)
 	matchIndex map[string]int // confirmed replicated upto (leader only, per peer)
+	whoLeader string // last leader we saw an AppendEntries from 
 }
 
 // a new Raft node with the given ID and peers
@@ -129,6 +130,7 @@ func (n *Node) startElection() {
 				n.Unlock()
 			}
 		}(peerID, addr)
+		n.whoLeader = n.id
 	}
 
 	wg.Wait()
@@ -198,6 +200,8 @@ func (n *Node) HandleAppendEntries(args *AppendEntriesArgs, reply *AppendEntries
 
 	n.state = Follower
 	n.resetElectionTimer()
+
+	n.whoLeader = args.LeaderID // update last seen leader
 
 	//consistency check on followers
 	if args.PrevLogIndex > 0 {

@@ -41,3 +41,24 @@ type LogEntry struct {
 	Term int
 	Command Command
 }
+
+type ClientPutArgs struct {
+	Key string
+	Value string
+}
+
+type ClientPutReply struct {
+	Success bool
+	WhoLeader string  // who we think is the leader
+}
+
+type ClientGetArgs struct {
+	Key string
+}
+
+type ClientGetReply struct {
+	Value string
+	Found bool
+	Success bool
+	WhoLeader string
+}
