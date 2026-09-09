@@ -416,3 +416,16 @@ func (n *Node) applyCommittedLocked(){
 		}
 	}
 }
+
+
+func (n* Node) HandleDebugState(args *DebugStateArgs, reply *DebugStateReply) error {
+	n.Lock()
+	defer n.Unlock()
+	reply.State = n.state.String()
+	reply.Term = n.currentTerm
+	reply.LogLen = len(n.log)
+	reply.CommitIndex = n.commitIndex
+	reply.LastApplied = n.lastApplied
+	reply.WhoLeader = n.whoLeader
+	return nil
+}

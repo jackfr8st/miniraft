@@ -62,3 +62,15 @@ type ClientGetReply struct {
 	Success bool
 	WhoLeader string
 }
+
+
+type DebugStateArgs struct{}
+
+type DebugStateReply struct{
+	State string
+	Term int
+	LogLen int
+	CommitIndex int
+	LastApplied int
+	WhoLeader string
+}

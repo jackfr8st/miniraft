@@ -64,3 +64,7 @@ func (r *RaftRPC) ClientPut(args *ClientPutArgs, reply *ClientPutReply) error {
 func (r *RaftRPC) ClientGet(args *ClientGetArgs, reply *ClientGetReply) error {
 	return r.node.HandleClientGet(args, reply)
 }
+
+func (r *RaftRPC) DebugState(args *DebugStateArgs, reply *DebugStateReply) error {
+	return r.node.HandleDebugState(args, reply)
+}
