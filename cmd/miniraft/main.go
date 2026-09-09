@@ -20,7 +20,7 @@ func main() {
 
 	peers := parsePeers(*peersFlag)
 
-	n := raft.NewNode(*id, peers)
+	n := raft.NewNode(*id, peers, *id+".state.json")
 	if err := n.Serve(*addr); err != nil {
 		log.Fatal( err)
 	}

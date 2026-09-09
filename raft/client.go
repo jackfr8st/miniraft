@@ -1,6 +1,9 @@
 package raft
 
-import "time"
+import (
+	"log"
+	"time"
+)
 
 func (n *Node) HandleClientPut(args *ClientPutArgs, reply *ClientPutReply) error {
 	n.Lock()
@@ -12,6 +15,9 @@ func (n *Node) HandleClientPut(args *ClientPutArgs, reply *ClientPutReply) error
 
 	entry := LogEntry{Term: n.currentTerm, Command: Command{Op: OpPut, Key: args.Key, Value: args.Value}}
 	n.log = append(n.log, entry)
+	if err := n.saveStateLocked(); err != nil {
+		log.Printf("[%s] ffailed to save state: %v", n.id, err)
+	}
 	targetIndex := len(n.log)
 	term := n.currentTerm
 	n.Unlock()
