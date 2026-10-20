@@ -7,7 +7,10 @@ chaos testing, not simulation.
 
 
 - **Leader election** — randomized election timeouts, majority-vote
-  leadership, heartbeats to maintain leadership and prevent split votes.
+  leadership, heartbeats to maintain leadership and prevent split votes,
+  and the election restriction (Raft section 5.4.1): a node votes only for
+  a candidate whose log is at least as up to date as its own, so every
+  elected leader holds all committed entries.
 - **Log replication** — `AppendEntries` carrying real log entries,
   `nextIndex`/`matchIndex` reconciliation, follower log-consistency checks
   and conflict resolution, majority-plus-current-term commit safety rule.

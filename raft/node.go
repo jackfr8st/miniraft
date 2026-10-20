@@ -108,6 +108,7 @@ func (n *Node) startElection() {
 	term := n.currentTerm
 	n.votedFor = n.id
 	n.resetElectionTimer()
+	lastLogIndex, lastLogTerm := n.lastLogInfoLocked()
 	log.Printf("[%s] starting election for term %d", n.id, term)
 	if err := n.saveStateLocked(); err != nil {
 		log.Printf("[%s] ffailed to save state: %v", n.id, err)
@@ -124,7 +125,7 @@ func (n *Node) startElection() {
 		go func(peerID, addr string){
 			defer wg.Done()
 
-			args  := &RequestVoteArgs{Term: term, CandidateID: n.id}
+			args  := &RequestVoteArgs{Term: term, CandidateID: n.id, LastLogIndex: lastLogIndex, LastLogTerm: lastLogTerm}
 			var reply RequestVoteReply
 			if err := callRPC(addr, "RaftRPC.RequestVote", args, &reply); err != nil{
 				return
@@ -186,7 +187,13 @@ func (n *Node) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
 		n.votedFor = ""
 	}
 
-	if n.votedFor == "" || n.votedFor == args.CandidateID {
+	// election restriction (5.4.1): only vote for a candidate whose log is at least as up to date as ours,
+	// so a winner always holds every committed entry
+	myLastIndex, myLastTerm := n.lastLogInfoLocked()
+	upToDate := args.LastLogTerm > myLastTerm ||
+		(args.LastLogTerm == myLastTerm && args.LastLogIndex >= myLastIndex)
+
+	if (n.votedFor == "" || n.votedFor == args.CandidateID) && upToDate {
 		n.votedFor = args.CandidateID
 		n.resetElectionTimer()
 		reply.VoteGiven = true
@@ -384,6 +391,14 @@ func( n *Node) Run() {
 		
 
 /// HELPERS
+
+// index and term of the last log entry (0, 0 if the log is empty)
+func (n *Node) lastLogInfoLocked() (int, int) {
+	if len(n.log) == 0 {
+		return 0, 0
+	}
+	return len(n.log), n.log[len(n.log)-1].Term
+}
 
 // logs the node's state and term for debugging
 func (n *Node) statusLoop() {

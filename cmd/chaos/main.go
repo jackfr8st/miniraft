@@ -223,6 +223,36 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 	}
 
+	// Final pass: read back every committed write, not just a sample.
+	// A read error (e.g. an election still settling after the last kill) is
+	// retried; only a missing or wrong value counts as a mismatch.
+	fmt.Println()
+	fmt.Printf("=== Final pass: verifying all %d committed keys ===\n", len(written))
+	mismatches, unreadable := 0, 0
+	for k, expected := range written {
+		var got string
+		var found bool
+		var err error
+		for attempt := 0; attempt < 10; attempt++ {
+			got, found, err = getWithRedirect(addrTable, "127.0.0.1:9001", k)
+			if err == nil {
+				break
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
+		if err != nil {
+			fmt.Printf("!!! ERROR reading key=%s: %v\n", k, err)
+			unreadable++
+			continue
+		}
+		if !found || got != expected {
+			fmt.Printf("!!! DATA LOSS/MISMATCH: key=%s expected=%s found=%v got=%s\n", k, expected, found, got)
+			mismatches++
+		}
+	}
+	fmt.Printf("Final pass: %d keys checked, %d mismatches, %d unreadable\n", len(written), mismatches, unreadable)
+	failures += mismatches + unreadable
+
 	fmt.Println()
 	fmt.Println("=== Chaos test complete ===")
 	fmt.Printf("Writes attempted: %d, keys tracked: %d, failures: %d\n", writeCounter, len(written), failures)

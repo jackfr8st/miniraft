@@ -1,0 +1,76 @@
+Started 3 nodes. Waiting 3s for initial election...
+PUT k1=v1 -> OK
+PUT k2=v2 -> OK
+PUT k3=v3 -> OK
+PUT k4=v4 -> OK
+PUT k5=v5 -> OK
+PUT k6=v6 -> OK
+PUT k7=v7 -> OK
+PUT k8=v8 -> OK
+PUT k9=v9 -> OK
+PUT k10=v10 -> OK
+PUT k11=v11 -> OK
+>>> Killing node2 <<<
+>>> Restarted node2 <<<
+PUT k12=v12 -> OK
+PUT k13=v13 -> OK
+PUT k14=v14 -> OK
+PUT k15=v15 -> OK
+PUT k16=v16 -> OK
+PUT k17=v17 -> OK
+PUT k18=v18 -> OK
+PUT k19=v19 -> OK
+PUT k20=v20 -> OK
+PUT k21=v21 -> OK
+>>> Killing node1 <<<
+>>> Restarted node1 <<<
+PUT k22=v22 -> OK
+PUT k23=v23 -> OK
+PUT k24=v24 -> OK
+PUT k25=v25 -> OK
+PUT k26=v26 -> OK
+PUT k27=v27 -> OK
+PUT k28=v28 -> OK
+PUT k29=v29 -> OK
+PUT k30=v30 -> OK
+PUT k31=v31 -> OK
+>>> Killing node1 <<<
+>>> Restarted node1 <<<
+PUT k32=v32 -> OK
+PUT k33=v33 -> OK
+PUT k34=v34 -> OK
+PUT k35=v35 -> OK
+PUT k36=v36 -> OK
+PUT k37=v37 -> OK
+PUT k38=v38 -> OK
+PUT k39=v39 -> OK
+PUT k40=v40 -> OK
+PUT k41=v41 -> OK
+>>> Killing node1 <<<
+>>> Restarted node1 <<<
+PUT k42=v42 -> OK
+PUT k43=v43 -> OK
+PUT k44=v44 -> OK
+PUT k45=v45 -> OK
+PUT k46=v46 -> OK
+PUT k47=v47 -> OK
+PUT k48=v48 -> OK
+PUT k49=v49 -> OK
+PUT k50=v50 -> OK
+PUT k51=v51 -> OK
+>>> Killing node2 <<<
+>>> Restarted node2 <<<
+PUT k52=v52 -> OK
+PUT k53=v53 -> OK
+PUT k54=v54 -> OK
+PUT k55=v55 -> OK
+PUT k56=v56 -> OK
+PUT k57=v57 -> OK
+PUT k58=v58 -> OK
+
+=== Final pass: verifying all 58 committed keys ===
+Final pass: 58 keys checked, 0 mismatches, 0 unreadable
+
+=== Chaos test complete ===
+Writes attempted: 58, keys tracked: 58, failures: 0
+RESULT: PASS - all committed writes survived

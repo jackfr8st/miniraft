@@ -3,6 +3,8 @@ package raft
 type RequestVoteArgs struct {
 	Term int
 	CandidateID string
+	LastLogIndex int // index of candidate's last log entry (0 if empty)
+	LastLogTerm int // term of candidate's last log entry (0 if empty)
 }
 
 type RequestVoteReply struct {
