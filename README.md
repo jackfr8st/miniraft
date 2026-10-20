@@ -5,7 +5,6 @@ in Go — a fault-tolerant, replicated key-value store built as a distributed
 systems portfolio project. Verified via real process kills and automated
 chaos testing, not simulation.
 
-## Status: Complete (Milestones 1–4)
 
 - **Leader election** — randomized election timeouts, majority-vote
   leadership, heartbeats to maintain leadership and prevent split votes.
