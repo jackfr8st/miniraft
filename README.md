@@ -74,6 +74,20 @@ sample of prior writes every cycle, and kills/restarts a random node every
 `killInterval`. Exits non-zero and prints every mismatch if any committed
 write is ever lost or returns a stale value.
 
+### Benchmark
+
+```bash
+go run ./cmd/bench -out=bench.md
+```
+
+Builds the node binary, then measures leader failover (kills the leader 5
+times; time until a new leader is elected and until the next write commits)
+and write throughput with 1, 8 and 32 concurrent clients for 30s each, each
+level on a fresh cluster. Prints ops/sec and p50/p95/p99 latency as a
+markdown table. Nodes listen on 9101-9103 so a dev cluster on 9001 is
+unaffected. See `-h` for flags (`-duration`, `-clients`, `-failoverTrials`,
+`-keep` to retain node logs).
+
 ## Project structure
 
 ```
@@ -89,6 +103,7 @@ cmd/
   client/       CLI client for put/get against the cluster
   debug/        CLI tool for querying DebugState
   chaos/        Automated chaos-testing harness
+  bench/        Throughput/latency and leader-failover benchmark
 chaos_test.ps1  Original PowerShell chaos-test driver, superseded by
                 cmd/chaos — kept as part of the debugging record (see
                 DESIGN_LOG.md, Step 21)
