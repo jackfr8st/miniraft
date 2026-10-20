@@ -13,7 +13,8 @@ chaos testing, not simulation.
   `nextIndex`/`matchIndex` reconciliation, follower log-consistency checks
   and conflict resolution, majority-plus-current-term commit safety rule.
 - **Persistence** — `currentTerm`, `votedFor`, and the log survive a
-  process restart via atomic disk writes (temp file, fsync, rename).
+  process restart: state is written to a temp file, fsynced, then swapped
+  into place.
 - **Observability & chaos testing** — a `DebugState` RPC for on-demand
   cluster introspection, and an automated Go-native chaos-testing harness
   (`cmd/chaos`) that writes continuously while killing random nodes on a
@@ -27,7 +28,7 @@ all three nodes with zero failures.
 
 ## Running locally
 
-Requires Go 1.22+.
+Requires Go 1.26.5+ (per `go.mod`).
 
 ```bash
 go build -o bin/miniraft ./cmd/miniraft
@@ -88,6 +89,23 @@ markdown table. Nodes listen on 9101-9103 so a dev cluster on 9001 is
 unaffected. See `-h` for flags (`-duration`, `-clients`, `-failoverTrials`,
 `-keep` to retain node logs).
 
+#### Results: per-peer connection reuse at 32 clients
+
+Medians of 3 runs each, 30s per run, on a 3-node localhost cluster
+(windows/amd64, 12 CPUs, go1.26.5):
+
+| 32 clients | Ops/sec | Errors | Elections |
+|:--|--:|--:|--:|
+| Before | 31.7 | 65,138 | 112 |
+| After  | 109.2 | 66 | 0 |
+
+Root cause: every RPC dialed a fresh TCP connection, leaving a `TIME_WAIT`
+socket behind each call, so under load the OS ran out of ephemeral ports,
+heartbeats failed, and followers kept starting elections. The fix keeps one
+persistent `net/rpc` connection per peer (`raft/server.go`). Raw reports for
+every run, including leader-failover timings, are in
+[`docs/bench/`](./docs/bench/).
+
 ## Project structure
 
 ```
@@ -95,8 +113,9 @@ raft/
   node.go       Core state machine: election, heartbeats, AppendEntries handling
   rpc.go        RPC message types (RequestVote, AppendEntries, ClientPut/Get, DebugState)
   server.go     net/rpc server wiring and the client-side callRPC helper
+                (one persistent connection per peer)
   client.go     ClientPut/ClientGet handlers, leader-redirect logic, commit-wait
-  persist.go    Atomic save/load of persistent state to disk
+  persist.go    Save (temp file, fsync, swap into place) and load of persistent state
   persist_test.go   Unit tests for the persistence layer
 cmd/
   miniraft/     The node executable
@@ -104,17 +123,16 @@ cmd/
   debug/        CLI tool for querying DebugState
   chaos/        Automated chaos-testing harness
   bench/        Throughput/latency and leader-failover benchmark
+docs/
+  bench/        Benchmark reports (before/after connection reuse, failover)
 chaos_test.ps1  Original PowerShell chaos-test driver, superseded by
-                cmd/chaos — kept as part of the debugging record (see
-                DESIGN_LOG.md, Step 21)
+                cmd/chaos — kept for reference
 ```
 
 ## Design decisions and trade-offs
 
-Full reasoning for every design decision, alternative considered, and bug
-found along the way is documented in [`DESIGN_LOG.md`](./DESIGN_LOG.md),
-written incrementally as the project was built rather than reconstructed
-afterward. Highlights:
+The main design decisions, the alternatives they were weighed against, and
+the notable bugs found along the way:
 
 - **`net/rpc` over gRPC** - standard library, zero dependencies, exposes
   the RPC mechanics directly; trades away cross-language clients and
@@ -124,12 +142,14 @@ afterward. Highlights:
   performance a production system with a large log would need.
 - **A leader can only directly commit log entries from its own current
   term** (Raft paper section 5.4.2) - the single trickiest safety rule in
-  the algorithm, implemented and explained in detail in the design log.
-- **A real, found-and-fixed cross-platform bug:** `os.Rename` provides
-  POSIX's atomic-replace semantics on Linux but not on Windows, which
-  caused intermittent persistence failures under load - diagnosed from
-  the exact OS error string and fixed with a documented, narrower
-  guarantee.
+  the algorithm; entries from earlier terms are committed only indirectly,
+  once an entry from the current term reaches a majority.
+- **A real, found-and-fixed cross-platform bug:** on Windows, renaming
+  the temp file over an existing state file intermittently failed under
+  load, so state saves failed - diagnosed from the exact OS error string.
+  The workaround removes the old state file first and then renames the
+  new one into place, which trades away crash safety during the swap (see
+  Known limitations).
 - **The chaos-testing harness was rewritten from PowerShell to native Go**
   after an extended debugging process revealed the failures were entirely
   in shell scripting/tooling (quoting, multi-line output parsing), never
@@ -146,6 +166,8 @@ afterward. Highlights:
 - No log compaction / snapshotting - the log grows unboundedly.
 - Reads are served only by the leader, straight from applied state;
   no read-index/lease-read optimization for linearizable follower reads.
+- State replacement removes the old file before renaming the new one, so a
+  crash between the two calls can lose persisted state.
 
 ## Reference
 
@@ -153,9 +175,8 @@ afterward. Highlights:
   Consensus Algorithm (Extended Version)."** *Proceedings of the 2014
   USENIX Annual Technical Conference (USENIX ATC '14)*, 2014.
   [raft.github.io/raft.pdf](https://raft.github.io/raft.pdf) - the paper
-  this implementation follows. Section references throughout the code and
-  `DESIGN_LOG.md` (e.g. section 5.3 log matching, section 5.4.2 commit
-  safety) refer to this paper.
+  this implementation follows. Section references in this README (e.g.
+  section 5.4.2 commit safety) refer to this paper.
 - [The Raft Consensus Algorithm website](https://raft.github.io/) - the
   paper's companion site, including the interactive visualization used
   to sanity-check election and replication behavior during development.
@@ -166,4 +187,5 @@ understandable and implementable than Paxos, and implementing it from the
 paper is a standard distributed-systems exercise (e.g. MIT's 6.824/6.5840
 course). No part of the consensus algorithm itself is original; the
 value of this project is in the from-scratch Go implementation, the
-verified correctness testing, and the debugging record in `DESIGN_LOG.md`.
+verified correctness testing, and the benchmarking and debugging work
+behind it.
